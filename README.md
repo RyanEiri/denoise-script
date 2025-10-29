@@ -86,6 +86,16 @@ This takes a short noise sample from the start of the video, profiles it, denois
 
 ---
 
+## 🙏 Acknowledgments
+
+The original concept of sampling ambient noise with `sox noiseprof`  
+and applying it to full-length audio with `sox noisered` and `ffmpeg`  
+was adapted from a discussion on [Unix & Linux Stack Exchange](https://unix.stackexchange.com/a/427343/238156)  
+by user **JdeBP**. The current versions extend that method with streaming pipes,  
+multithreading, and per-channel parallelization.
+
+---
+
 ## 📄 License
 
 This project is released under the [MIT License](LICENSE).
