@@ -1,5 +1,11 @@
-#!/bin/bash
-# Clean noise from recordings
+#!/usr/bin/env bash
+# denoise.sh — v1.0 “Classic”
+# Original SoX + ffmpeg denoising workflow.
+# Inspired by an answer by JdeBP on Unix & Linux Stack Exchange:
+# https://unix.stackexchange.com/a/427343/238156
+#
+# Author: Ryan Eric Johnson
+# License: MIT
 
 if [ -z "$2" ];then
   echo 'USAGE:
