@@ -1,67 +1,82 @@
-#!/bin/bash
-# Clean noise from recordings
+#!/usr/bin/env bash
+# Denoise with a measured SoX noise profile (streamed; no giant WAVs).
+# Multithreaded ffmpeg; auto-matches channels/sample-rate to avoid mismatches.
 
-if [ -z "$2" ];then
-  echo 'USAGE:
-    denoise input.mov output.mov
-OR 
-    denoise input.mov output.mov [ambient-noise-start-time] [ambient-noise-duration] [sox-noisered-amount] [sox-norm-param]
-E.G, EXPLICIT DEFAULTS
-    denoise input.mov output.mov 00:00:00  00:00:00.3 0.2 -1
-PROCESS ALL VIDEOS IN DIRECTORY:
-    for f in `find . -type f | grep -iE "\.mov$|\.mp4$"`;do denoise "${f%.*}"{,-rn}."${f##*.}";done
-'
-  exit 0
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+USAGE:
+  denoise.sh input.mp4 output.mp4
+OR (override defaults):
+  denoise.sh input.mp4 output.mp4 [noise_start] [noise_duration] [nr_amount] [norm_db] [threads]
+
+DEFAULTS:
+  noise_start      00:00:00
+  noise_duration   00:00:00.3
+  nr_amount        0.20
+  norm_db          -1
+  threads          $(nproc)
+USAGE
+}
+
+if [[ $# -lt 2 ]]; then
+  usage
+  exit 1
 fi
 
-INPUT="$1"
-OUTPUT="$2"
+INPUT=$1
+OUTPUT=$2
+SS=${3:-00:00:00}
+T=${4:-00:00:00.3}
+NR=${5:-0.20}
+NORM=${6:--1}
+THREADS=${7:-${FFMPEG_THREADS:-$(nproc)}}
 
-if [ $# -ge 3 ]
-then
-  SS="$3"
-else
-  SS="00:00:00"
+# Requirements
+command -v ffmpeg >/dev/null 2>&1 || { echo "ffmpeg not found"; exit 1; }
+command -v ffprobe >/dev/null 2>&1 || { echo "ffprobe not found"; exit 1; }
+command -v sox >/dev/null 2>&1 || { echo "sox not found"; exit 1; }
+
+# Probe audio stream (a:0)
+has_audio=$(ffprobe -v error -select_streams a:0 -show_entries stream=index -of default=nokey=1:nw=1 "$INPUT" || true)
+if [[ -z "$has_audio" ]]; then
+  echo "No audio stream (a:0) found in: $INPUT"
+  exit 1
 fi
 
-if [ $# -ge 4 ]
-then
-  T="$4"
-else
-  T="00:00:00.3"
-fi
+AC=$(ffprobe -v error -select_streams a:0 -show_entries stream=channels -of default=nokey=1:nw=1 "$INPUT" || echo "")
+AR=$(ffprobe -v error -select_streams a:0 -show_entries stream=sample_rate -of default=nokey=1:nw=1 "$INPUT" || echo "")
+AC=${AC:-2}
+AR=${AR:-48000}
+if ! [[ "$AC" =~ ^[0-9]+$ ]]; then AC=2; fi
+if ! [[ "$AR" =~ ^[0-9]+$ ]]; then AR=48000; fi
+if [[ "$AC" -lt 1 ]]; then AC=2; fi
+if [[ "$AR" -lt 8000 ]]; then AR=48000; fi
 
-if [ $# -ge 5 ]
-then
-  NR="$5"
-else
-  NR="0.2"
-fi
+workdir=$(mktemp -d -t denoise-XXXXXX)
+trap 'rm -rf "$workdir"' EXIT
+PROFILE="$workdir/noise.prof"
 
-if [ $# -ge 6 ]
-then
-  N="$6"
-else
-  N="-1"
-fi
+# 1) Build noise profile (match channels/rate)
+ffmpeg -hide_banner -loglevel error -nostdin -y -threads "$THREADS" \
+  -ss "$SS" -t "$T" -i "$INPUT" -map a:0 -vn -ac "$AC" -ar "$AR" -f s16le - \
+| sox --buffer 131072 -t s16 -r "$AR" -c "$AC" - -n noiseprof "$PROFILE"
 
-# auxiliary files
-TMP_NOISE_WAV="noise.wav"
-TMP_NOISE_PRO="noise_profile_file"
-TMP_INPUT="input_audio.wav"
-TMP_OUTPUT="output_audio.wav"
+# 2) Stream full audio -> denoise -> remux with original video
+ffmpeg -hide_banner -loglevel error -nostdin -y -threads "$THREADS" \
+  -i "$INPUT" -map a:0 -vn -ac "$AC" -ar "$AR" -f s16le - \
+| sox --buffer 131072 -t s16 -r "$AR" -c "$AC" - -t s16 - \
+     noisered "$PROFILE" "$NR" norm "$NORM" \
+| ffmpeg -hide_banner -loglevel error -nostdin -y \
+  -thread_queue_size 1024 -i "$INPUT" \
+  -thread_queue_size 1024 -f s16le -ar "$AR" -ac "$AC" -i - \
+  -map 0:v:0 -map 1:a:0 \
+  -c:v copy \
+  -c:a aac -b:a 256k \
+  -threads "$THREADS" \
+  -movflags +faststart \
+  "$OUTPUT"
 
-# https://unix.stackexchange.com/a/427343/238156
+echo "Denoised -> $OUTPUT (AC=$AC, AR=$AR, threads=$THREADS)"
 
-# assume first 0.3 secs are noise
-ffmpeg -i "$INPUT" -ss "$SS" -t "$T" "$TMP_NOISE_WAV"
-sox "$TMP_NOISE_WAV" -n noiseprof "$TMP_NOISE_PRO"
-ffmpeg -i "$INPUT" "$TMP_INPUT"
-# remove noise (0.2-0.3 works well) and normalize (-1 to avoid clipping)
-sox "$TMP_INPUT" "$TMP_OUTPUT" noisered "$TMP_NOISE_PRO" "$NR" norm "$N"
-ffmpeg -i "$INPUT" -i "$TMP_OUTPUT" -c:v copy -b:a 256k -map 0:v:0 -map 1:a:0 "$OUTPUT"
-# clean up auxiliary files
-rm "$TMP_NOISE_WAV"
-rm "$TMP_NOISE_PRO"
-rm "$TMP_INPUT"
-rm "$TMP_OUTPUT"
