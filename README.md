@@ -80,9 +80,9 @@ This takes a short noise sample from the start of the video, profiles it, denois
 
 | Version | Date | Summary |
 |----------|------|----------|
-| **v1.0** | 2024-01 | Baseline SoX version with WAV intermediates. |
-| **v2.0** | 2025-10 | Streamed, multithreaded ffmpeg version — no file size limits. |
-| **v3.0** | 2025-10 | Parallel per-channel SoX workers for full CPU utilization. |
+| **v0.1** | 2024-01 | Baseline SoX version with WAV intermediates. |
+| **v0.2** | 2025-10 | Streamed, multithreaded ffmpeg version — no file size limits. |
+| **v0.3** | 2025-10 | Parallel per-channel SoX workers for full CPU utilization. |
 
 ---
 
