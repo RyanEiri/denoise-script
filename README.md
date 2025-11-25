@@ -10,9 +10,9 @@ This repository contains three versions of the `denoise.sh` script, each reflect
 
 | Branch | Version | Description |
 |:-------|:---------|:-------------|
-| **classic** | v1.0 | The original SoX implementation using full-length WAV intermediates. Simple but not suitable for large (>4 GB) files. |
-| **streamed** | v2.0 | A streamed version that eliminates temporary WAVs, using raw PCM pipes with ffmpeg. Fully multithreaded for encode/decode. |
-| **parallel** | v3.0 | The most advanced version. Runs SoX per channel in parallel for higher CPU utilization and faster processing on multi-core systems. |
+| **classic** | v0.1 | The original SoX implementation using full-length WAV intermediates. Simple but not suitable for large (>4 GB) files. |
+| **streamed** | v0.2 | A streamed version that eliminates temporary WAVs, using raw PCM pipes with ffmpeg. Fully multithreaded for encode/decode. |
+| **parallel** | v0.3 | The most advanced version. Runs SoX per channel in parallel for higher CPU utilization and faster processing on multi-core systems. |
 
 ---
 
